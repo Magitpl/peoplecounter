@@ -22,7 +22,7 @@ public class AccessController {
         System.out.println("Schüler betritt Raum " + room + ": " + name);
         System.out.println("Schüler hält RFID-Chip an Reader ...");
 
-        String chipId = reader.readChip(chipIdInput);
+        String chipId = reader.readChip();
         int studentId = db.saveNewStudent(name, chipId);
         if (studentId == -1) {
             System.out.println("Fehler beim Speichern des Schülers.\n");
@@ -40,37 +40,30 @@ public class AccessController {
     }
 
     // Bekannter Schüler: Eintritt oder Austritt (Toggle)
-    public void toggleEntryOrExit(String chipIdInput) {
-        System.out.println("Schüler hält RFID-Chip an Reader ...");
+    public void toggleEntryOrExit(String chipId) {
 
-        String chipId = reader.readChip(chipIdInput);
-        Student s = db.findStudentByChip(chipId);
-
-        if (s == null) {
-            System.out.println("Unbekannter Chip! Zutritt verweigert.\n");
+        Student student = db.findStudentByChip(chipId);
+        if (student == null) {
+            System.out.println("❌ Unbekannter Chip!");
             return;
         }
 
-        boolean inside = db.isStudentInsideRoom(s.getId(), room);
-        String now = LocalDateTime.now().format(fmt);
+        boolean inside = db.isStudentInsideRoom(student.getId(), room);
 
-        if (!inside) {
-            System.out.println("-> " + s.getName() + " tritt in Raum " + room + " ein.");
-            db.createEntryVisit(s.getId(), room);
-            showGreenSignal();
-            System.out.println("Eintrittszeit: " + now);
+        if (inside) {
+            db.closeOpenVisit(student.getId(), room);
+            System.out.println("⬅ " + student.getName() + " verlässt " + room);
         } else {
-            System.out.println("-> " + s.getName() + " verlässt Raum " + room + ".");
-            db.closeOpenVisit(s.getId(), room);
-            showGreenSignal();
-            System.out.println("Austrittszeit: " + now);
+            db.createEntryVisit(student.getId(), room);
+            System.out.println("➡ " + student.getName() + " betritt " + room);
         }
 
-        System.out.println();
         db.printCurrentPeopleInRoom(room);
     }
 
     private void showGreenSignal() {
         System.out.println("[VISUELL] >>> GRÜNES LICHT AN <<<");
     }
+
+
 }
