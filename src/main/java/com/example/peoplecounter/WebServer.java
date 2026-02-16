@@ -1,7 +1,7 @@
 package com.example.peoplecounter;
 
-import com.sun.net.httpserver.HttpServer;
 import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -15,135 +15,154 @@ public class WebServer {
 
         HttpServer server = HttpServer.create(new InetSocketAddress(8080), 0);
 
-
-        server.createContext("/api/login", exchange -> {
-            if ("POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-
-                String body = new String(exchange.getRequestBody().readAllBytes());
-                JSONObject req = new JSONObject(body);
-
-                String email = req.getString("email");
-                String password = req.getString("password");
-
-                JSONObject res = new JSONObject();
-
-                if (email.equals("admin@test.com") && password.equals("1234")) {
-                    res.put("token", "mysecrettoken123");
-                    sendResponse(exchange, 200, res.toString());
-                } else {
-                    res.put("error", "Invalid credentials");
-                    sendResponse(exchange, 401, res.toString());
-                }
-
-            } else {
-                sendResponse(exchange, 405, "{\"error\":\"Only POST allowed\"}");
-            }
-        });
-
-
+        // =========================
+        // ROOMS
+        // =========================
         server.createContext("/api/rooms", exchange -> {
-            JSONArray arr = new JSONArray();
 
-            db.getAllRooms().forEach(r -> {
+            if (isOptions(exchange)) return;
+
+            if (!exchange.getRequestMethod().equalsIgnoreCase("GET")) {
+                sendResponse(exchange, 405, "[]");
+                return;
+            }
+
+            JSONArray arr = new JSONArray();
+            for (Room r : db.getAllRooms()) {
                 arr.put(new JSONObject()
                         .put("room_number", r.getRoomNumber())
-                        .put("description", r.getDescription()));
-            });
-
-            sendResponse(exchange, 200, arr.toString());
-        });
-
-
-        server.createContext("/api/room", exchange -> {
-
-            String path = exchange.getRequestURI().getPath(); // /api/room/A201
-            String[] parts = path.split("/");
-
-            if (parts.length < 4) {
-                sendResponse(exchange, 400, "{\"error\":\"room missing\"}");
-                return;
+                        .put("description", r.getDescription())
+                );
             }
 
-            String room = parts[3].toUpperCase(); // ✅ GROSSSCHREIBUNG FIX
-            JSONArray arr = db.getCurrentPeopleAsJson(room);
-
             sendResponse(exchange, 200, arr.toString());
         });
 
-
-        server.createContext("/api/devices", exchange -> {
-            JSONArray arr = db.getDevicesAsJson();
-            sendResponse(exchange, 200, arr.toString());
-        });
-
-
-        server.createContext("/api/permissions", exchange -> {
-            JSONArray arr = db.getPermissionsAsJson();
-            sendResponse(exchange, 200, arr.toString());
-        });
-
-
+        // =========================
+        // COUNT
+        // =========================
         server.createContext("/api/count", exchange -> {
 
-            String path = exchange.getRequestURI().getPath(); // /api/count/A201
-            String[] parts = path.split("/");
+            if (isOptions(exchange)) return;
 
-            if (parts.length < 4) {
-                sendResponse(exchange, 400, "{\"error\":\"room missing\"}");
+            if (!exchange.getRequestMethod().equalsIgnoreCase("GET")) {
+                sendResponse(exchange, 405, "{}");
                 return;
             }
 
-            String room = parts[3].toUpperCase(); // ✅ GROSSSCHREIBUNG FIX
-            int count = db.getCurrentCountForRoom(room);
+            String[] parts = exchange.getRequestURI().getPath().split("/");
+            if (parts.length < 4) {
+                sendResponse(exchange, 400, "{}");
+                return;
+            }
 
-            JSONObject res = new JSONObject();
-            res.put("room", room);
-            res.put("count", count);
-
-            sendResponse(exchange, 200, res.toString());
+            int count = db.getCurrentCountForRoom(parts[3]);
+            sendResponse(exchange, 200,
+                    new JSONObject().put("count", count).toString());
         });
 
+        // =========================
+        // ENTRIES
+        // =========================
+        server.createContext("/api/entries", exchange -> {
 
-        server.createContext("/api/visits", exchange -> {
-            JSONArray arr = db.getAllVisitsAsJson();
+            if (isOptions(exchange)) return;
+
+            if (!exchange.getRequestMethod().equalsIgnoreCase("GET")) {
+                sendResponse(exchange, 405, "[]");
+                return;
+            }
+
+            String[] parts = exchange.getRequestURI().getPath().split("/");
+            if (parts.length < 4) {
+                sendResponse(exchange, 400, "[]");
+                return;
+            }
+
+            JSONArray arr = new JSONArray();
+            for (Entry e : db.getEntriesForRoom(parts[3])) {
+                arr.put(new JSONObject()
+                        .put("name", e.name)
+                        .put("room", e.room)
+                        .put("entry_time", e.entry_time != null ? e.entry_time.toString() : null)
+                        .put("exit_time", e.exit_time != null ? e.exit_time.toString() : null)
+                );
+            }
+
             sendResponse(exchange, 200, arr.toString());
         });
 
-
+        // =========================
+        // LINE
+        // =========================
         server.createContext("/api/line", exchange -> {
 
-            String path = exchange.getRequestURI().getPath(); // /api/line/A201
-            String[] parts = path.split("/");
+            if (isOptions(exchange)) return;
 
-            if (parts.length < 4) {
-                sendResponse(exchange, 400, "{\"error\":\"room missing\"}");
+            if (!exchange.getRequestMethod().equalsIgnoreCase("GET")) {
+                sendResponse(exchange, 405, "[]");
                 return;
             }
 
-            String room = parts[3].toUpperCase(); // ✅ GROSSSCHREIBUNG FIX
-            JSONArray arr = db.getLineDataForRoom(room);
+            String[] parts = exchange.getRequestURI().getPath().split("/");
+            if (parts.length < 4) {
+                sendResponse(exchange, 400, "[]");
+                return;
+            }
 
-            sendResponse(exchange, 200, arr.toString());
+            sendResponse(exchange, 200,
+                    db.getLineDataForRoom(parts[3]).toString());
         });
 
+        // =========================
+        // RFID
+        // =========================
+        server.createContext("/api/rfid", exchange -> {
+
+            if (isOptions(exchange)) return;
+
+            if (!exchange.getRequestMethod().equalsIgnoreCase("POST")) {
+                sendResponse(exchange, 405, "{}");
+                return;
+            }
+
+            JSONObject body = new JSONObject(
+                    new String(exchange.getRequestBody().readAllBytes()));
+
+            String cardId = body.getString("cardId");
+
+            System.out.println("RFID gescannt: " + cardId);
+
+            db.handleRFIDScan(cardId);
+
+            sendResponse(exchange, 200, "{}");
+        });
 
         server.start();
-        System.out.println("➡ Webserver läuft unter http://localhost:8080/");
+        System.out.println("✅ Backend läuft auf http://localhost:8080");
     }
 
+    // =========================
+    // HELPERS
+    // =========================
 
+    private static boolean isOptions(HttpExchange ex) throws IOException {
+        if (ex.getRequestMethod().equalsIgnoreCase("OPTIONS")) {
+            sendResponse(ex, 200, "");
+            return true;
+        }
+        return false;
+    }
 
-    private static void sendResponse(HttpExchange exchange, int status, String response) throws IOException {
+    private static void sendResponse(HttpExchange ex, int status, String body) throws IOException {
+        ex.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
+        ex.getResponseHeaders().add("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+        ex.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type");
+        ex.getResponseHeaders().set("Content-Type", "application/json");
 
-        exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
-        exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
-        exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-        exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type");
-
-        exchange.sendResponseHeaders(status, response.getBytes().length);
-
-        try (OutputStream os = exchange.getResponseBody()) {
-            os.write(response.getBytes());
+        ex.sendResponseHeaders(status, body.getBytes().length);
+        try (OutputStream os = ex.getResponseBody()) {
+            os.write(body.getBytes());
         }
     }
 }

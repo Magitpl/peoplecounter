@@ -14,12 +14,14 @@ public class MySQLDatabase {
     String password = "1234";
 
     public MySQLDatabase() {
+        System.out.println(">>> DB USER = " + user);
         try {
             Class.forName("com.mysql.cj.jdbc.Driver");
         } catch (ClassNotFoundException e) {
             System.out.println("MySQL-Treiber nicht gefunden!");
         }
     }
+
 
 
 
@@ -397,5 +399,155 @@ public class MySQLDatabase {
         }
 
         return arr;
+    }
+    public List<Entry> getEntriesForRoom(String room) {
+
+        List<Entry> entries = new ArrayList<>();
+
+        String sql = """
+        SELECT s.name, v.room, v.entry_time, v.exit_time
+        FROM visits v
+        JOIN students s ON v.student_id = s.id
+        WHERE v.room = ?
+        ORDER BY v.entry_time DESC
+        LIMIT 50
+    """;
+
+        try (Connection conn = DriverManager.getConnection(url, user, password);
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setString(1, room);
+            ResultSet rs = stmt.executeQuery();
+
+            while (rs.next()) {
+                entries.add(new Entry(
+                        0,
+                        rs.getString("name"),
+                        rs.getString("room"),
+                        rs.getTimestamp("entry_time"),
+                        rs.getTimestamp("exit_time")
+                ));
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return entries;
+    }
+
+    // =====================
+// DEVICES
+// =====================
+    public void addDevice(String name, String location, String owner) {
+        String sql = "INSERT INTO devices (name, location, owner) VALUES (?, ?, ?)";
+
+        try (Connection conn = DriverManager.getConnection(url, user, password);
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, name);
+            ps.setString(2, location);
+            ps.setString(3, owner);
+            ps.executeUpdate();
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+
+
+    // =====================
+// PERMISSIONS
+// =====================
+    public void addPermission(String role, String username, String owner) {
+        String sql = "INSERT INTO permissions (role, user, owner, date) VALUES (?, ?, ?, NOW())";
+
+        try (Connection conn = DriverManager.getConnection(url, user, password);
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, role);
+            ps.setString(2, username);
+            ps.setString(3, owner);
+            ps.executeUpdate();
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void handleRFIDScan(String cardId) {
+
+        Student s = findStudentByChip(cardId);
+
+        if (s == null) {
+            System.out.println("Unbekannte Karte!");
+            return;
+        }
+
+        String room = "A201"; // oder dynamisch später
+
+        if (isStudentInsideRoom(s.getId(), room)) {
+            closeOpenVisit(s.getId(), room);
+        } else {
+            createEntryVisit(s.getId(), room);
+        }
+    }
+
+    public void deletePermission(int id) {
+        String sql = "DELETE FROM permissions WHERE id = ?";
+
+        try (Connection conn = DriverManager.getConnection(url, user, password);
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setInt(1, id);
+            ps.executeUpdate();
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+    // =========================
+// DELETE DEVICE
+// =========================
+    public void deleteDevice(int id) {
+        String sql = "DELETE FROM devices WHERE id = ?";
+
+        try (Connection conn = DriverManager.getConnection(url, user, password);
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setInt(1, id);
+            stmt.executeUpdate();
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // =========================
+// RFID HANDLER
+// =========================
+    public void handleRFIDScan(String cardId) {
+
+        String room = "A201"; // 👉 Falls du später mehrere Räume hast, hier dynamisch machen
+
+        Student student = findStudentByChip(cardId);
+
+        if (student == null) {
+            System.out.println("Unbekannte Karte: " + cardId);
+            return;
+        }
+
+        int studentId = student.getId();
+
+        if (isStudentInsideRoom(studentId, room)) {
+            // EXIT
+            closeOpenVisit(studentId, room);
+            System.out.println("EXIT registriert für " + student.getName());
+        } else {
+            // ENTRY
+            createEntryVisit(studentId, room);
+            System.out.println("ENTRY registriert für " + student.getName());
+        }
     }
 }

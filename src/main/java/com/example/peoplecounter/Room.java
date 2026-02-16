@@ -5,6 +5,7 @@ public class Room {
     private final int id;
     private final String roomNumber;
     private final String description;
+    public boolean room_number;
 
     public Room(int id, String roomNumber, String description) {
         this.id = id;
@@ -22,5 +23,9 @@ public class Room {
 
     public String getDescription() {
         return description;
+    }
+
+    public boolean isRoom_number() {
+        return room_number;
     }
 }
